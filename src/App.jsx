@@ -1,8 +1,5 @@
 import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
-// --- IMPORT BACKGROUND IMAGE ---
-// Make sure this path is correct relative to App.js
-import chatBG from "./cat.jpg"; 
 
 // --- CONFIGURATION ---
 const API_BASE_URL = "http://localhost:8000";
@@ -55,10 +52,8 @@ const AuthView = ({ onLoginSuccess }) => {
       const endpoint = isLogin ? "/api/auth/login" : "/api/auth/signup";
       const authData = await api_helper(endpoint, "POST", { username, password });
       
-      // 1. Store Token
       localStorage.setItem("chat_token", authData.token);
 
-      // 2. GLITCH FIX: Fetch full user profile immediately to ensure we have the 'id'
       const userProfile = await api_helper("/api/auth/me", "GET", null, authData.token);
       
       onLoginSuccess(userProfile); 
@@ -70,44 +65,54 @@ const AuthView = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-[#F2F2F7] px-4 font-sans">
-      <div className="w-full max-w-sm bg-white/80 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl border border-white flex flex-col items-center animate-in fade-in zoom-in duration-500">
-        <div className="w-20 h-20 bg-gradient-to-tr from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center mb-6 shadow-xl rotate-3">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div className="flex items-center justify-center min-h-screen bg-[#EBE5DE] font-sans relative overflow-hidden">
+      {/* Abstract Background Blobs */}
+      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[#D7C0AE] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-[#C0B2A3] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
+
+      <div className="w-full max-w-md bg-white/60 backdrop-blur-2xl p-10 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 flex flex-col items-center z-10">
+        <div className="w-16 h-16 bg-[#6F4E37] rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-[#6F4E37]/20 rotate-3">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#FFF8F0]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
         </div>
-        <h3 className="text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
-          {isLogin ? "iChat" : "Create ID"}
+        <h3 className="text-3xl font-serif font-bold text-[#4A3B32] tracking-tight mb-2">
+          {isLogin ? "Welcome Back" : "Join Us"}
         </h3>
-        <p className="text-gray-400 mb-8 text-sm font-medium tracking-wide uppercase">
-          {isLogin ? "Sign in with Username" : "Join the global network"}
+        <p className="text-[#8D7B6F] mb-8 text-sm font-medium tracking-wide">
+          {isLogin ? "Enter your credentials to continue" : "Start your aesthetic journey today"}
         </p>
 
-        <form onSubmit={handleSubmit} className="w-full space-y-3">
-          <input 
-            type="text" required placeholder="Username"
-            className="w-full px-6 py-4 bg-gray-100/50 border-none rounded-2xl text-gray-900 focus:ring-2 focus:ring-blue-500/50 transition-all outline-none"
-            value={username} onChange={(e) => setUsername(e.target.value)} 
-          />
-          <input 
-            type="password" required placeholder="Password"
-            className="w-full px-6 py-4 bg-gray-100/50 border-none rounded-2xl text-gray-900 focus:ring-2 focus:ring-blue-500/50 transition-all outline-none"
-            value={password} onChange={(e) => setPassword(e.target.value)} 
-          />
-          {error && <p className="text-red-500 text-xs text-center font-semibold mt-2">{error}</p>}
+        <form onSubmit={handleSubmit} className="w-full space-y-4">
+          <div className="group">
+            <input 
+              type="text" required placeholder="Username"
+              className="w-full px-6 py-4 bg-[#F5F2EF] border border-transparent rounded-xl text-[#4A3B32] placeholder-[#A6988D] focus:bg-white focus:border-[#D7C0AE] focus:ring-4 focus:ring-[#D7C0AE]/20 transition-all outline-none"
+              value={username} onChange={(e) => setUsername(e.target.value)} 
+            />
+          </div>
+          <div className="group">
+            <input 
+              type="password" required placeholder="Password"
+              className="w-full px-6 py-4 bg-[#F5F2EF] border border-transparent rounded-xl text-[#4A3B32] placeholder-[#A6988D] focus:bg-white focus:border-[#D7C0AE] focus:ring-4 focus:ring-[#D7C0AE]/20 transition-all outline-none"
+              value={password} onChange={(e) => setPassword(e.target.value)} 
+            />
+          </div>
+          
+          {error && <p className="text-rose-500 text-xs text-center font-medium mt-2 bg-rose-50 py-1 rounded-lg">{error}</p>}
+          
           <button 
             disabled={loading}
-            className="w-full mt-4 bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200 disabled:opacity-50"
+            className="w-full mt-2 bg-[#6F4E37] text-[#FFF8F0] font-semibold py-4 rounded-xl hover:bg-[#5A3E2B] active:scale-[0.98] transition-all shadow-lg shadow-[#6F4E37]/20 disabled:opacity-50"
           >
-            {loading ? "Connecting..." : (isLogin ? "Sign In" : "Sign Up")}
+            {loading ? "Processing..." : (isLogin ? "Sign In" : "Sign Up")}
           </button>
         </form>
         <button 
           onClick={() => { setError(""); setIsLogin(!isLogin); }}
-          className="mt-8 text-sm text-blue-600 font-semibold hover:text-blue-800"
+          className="mt-8 text-sm text-[#8D7B6F] hover:text-[#6F4E37] transition-colors font-medium underline underline-offset-4 decoration-[#D7C0AE]"
         >
-          {isLogin ? "Create New Account" : "I already have an account"}
+          {isLogin ? "Need an account? Create one" : "Already have an account? Sign in"}
         </button>
       </div>
     </div>
@@ -157,33 +162,42 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white">
-      <div className="px-6 py-4 bg-white/90 backdrop-blur-xl border-b border-gray-100 sticky top-0 z-10 flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Chats</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-500">Hi, {currentUser.username}</span>
-          <button onClick={onLogout} className="text-blue-600 font-medium text-sm bg-blue-50 px-3 py-1 rounded-full hover:bg-blue-100 transition-colors">
-            Logout
-          </button>
+    <div className="h-screen flex flex-col bg-[#FDFBF7]">
+      {/* Header */}
+      <div className="px-8 py-6 bg-white/80 backdrop-blur-md border-b border-[#EEE5DB] sticky top-0 z-10 flex justify-between items-center shadow-sm">
+        <div>
+          <h1 className="text-2xl font-serif font-bold tracking-tight text-[#4A3B32]">Messages</h1>
+          <p className="text-xs font-medium text-[#9C8C7E] mt-0.5">Connected as {currentUser.username}</p>
         </div>
+        <button onClick={onLogout} className="text-[#6F4E37] hover:text-white font-medium text-xs border border-[#6F4E37] px-4 py-2 rounded-full hover:bg-[#6F4E37] transition-all">
+          Sign Out
+        </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pt-2">
-        {loading ? <div className="text-center mt-10 text-gray-400">Loading contacts...</div> : 
-         users.length === 0 ? <div className="text-center mt-10 text-gray-400">No contacts found.</div> :
+      <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-2">
+        {loading ? <div className="text-center mt-10 text-[#9C8C7E]">Loading contacts...</div> : 
+         users.length === 0 ? <div className="text-center mt-10 text-[#9C8C7E]">No contacts found.</div> :
          users.map((u) => (
           <div key={u.id} onClick={() => handleUserClick(u)} 
-            className={`flex items-center gap-4 py-4 border-b border-gray-50 cursor-pointer active:bg-gray-50 transition-colors group ${processingUser === u.id ? 'opacity-50 pointer-events-none' : ''}`}>
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center text-gray-600 font-bold text-lg group-hover:from-blue-500 group-hover:to-blue-600 group-hover:text-white transition-all shadow-sm">
-              {processingUser === u.id ? "..." : u.username[0].toUpperCase()}
+            className={`flex items-center gap-5 p-4 bg-white border border-[#F2EDE6] rounded-2xl cursor-pointer hover:shadow-md hover:border-[#D7C0AE] active:scale-[0.99] transition-all group ${processingUser === u.id ? 'opacity-50 pointer-events-none' : ''}`}>
+            
+            {/* Avatar */}
+            <div className="w-14 h-14 rounded-full bg-[#F5F0EB] text-[#6F4E37] flex items-center justify-center font-serif text-xl font-bold border border-[#EBE5DE] group-hover:bg-[#6F4E37] group-hover:text-[#FFF8F0] transition-colors">
+              {processingUser === u.id ? (
+                 <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+              ) : u.username[0].toUpperCase()}
             </div>
+
             <div className="flex-1">
-              <h3 className="font-semibold text-gray-900 text-lg">{u.username}</h3>
-              <p className="text-gray-400 text-sm group-hover:text-blue-500 transition-colors">Tap to message</p>
+              <h3 className="font-semibold text-[#4A3B32] text-lg">{u.username}</h3>
+              <p className="text-[#9C8C7E] text-sm group-hover:text-[#6F4E37] transition-colors">Tap to start conversation</p>
             </div>
-            <svg className="w-5 h-5 text-gray-300 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            
+            <div className="w-8 h-8 rounded-full bg-[#F9F7F5] flex items-center justify-center text-[#D7C0AE] group-hover:text-[#6F4E37] group-hover:bg-[#F0EBE5] transition-all">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
           </div>
         ))}
       </div>
@@ -203,7 +217,6 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
   useEffect(() => {
     socket.emit("joinChat", chatId);
     const handleReceive = (data) => {
-      // GLITCH FIX: Use '==' to match string IDs with number IDs
       if (data.chatId == chatId) {
         setMessages((prev) => [...prev, data]);
       }
@@ -228,67 +241,66 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
   };
 
   return (
-    <div className="flex flex-col h-screen animate-in slide-in-from-right duration-300 font-sans">
+    <div className="flex flex-col h-screen animate-in slide-in-from-right duration-300 font-sans bg-[#FDFBF7]">
       
-      {/* Header - slightly warmer tint for brown background */}
-      <div className="px-4 py-3 bg-[#FDFCF8]/80 backdrop-blur-xl border-b border-stone-200 sticky top-0 z-20 flex items-center gap-3 shadow-sm">
-        <button onClick={onBack} className="text-blue-600 flex items-center gap-1 hover:opacity-70 transition-opacity pr-2">
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+      {/* Header - Glassmorphism */}
+      <div className="px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-[#EBE5DE] sticky top-0 z-20 flex items-center gap-4 shadow-sm">
+        <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded-full bg-[#F5F2EF] text-[#6F4E37] hover:bg-[#EBE5DE] transition-colors">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          <span className="text-lg font-medium">Back</span>
         </button>
-        <div className="flex flex-col items-center flex-1 pr-12">
-           <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Conversation with</span>
-           <span className="text-base font-bold text-gray-900">{recipient.username}</span>
+        <div className="flex flex-col">
+           <span className="text-lg font-serif font-bold text-[#4A3B32]">{recipient.username}</span>
+           <span className="text-[11px] font-medium text-[#9C8C7E] flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Online
+           </span>
         </div>
       </div>
 
-      {/* Messages Area with Background Image */}
+      {/* Messages Area - SOLID COLOR BG UPDATED HERE */}
       <div 
-        className="flex-1 overflow-y-auto p-4 space-y-2 bg-fixed"
+        className="flex-1 overflow-y-auto p-6 space-y-4"
         style={{ 
-            backgroundImage: `url(${chatBG})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat'
+            backgroundColor: '#F2EBE5' // Warm Latte Foam color to match theme
         }}
       >
         {messages.map((msg, i) => {
-          // GLITCH FIX: Ensure types match
           const isMe = msg.senderId == currentUser.id; 
           
           return (
-            <div key={i} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+            <div key={i} className={`flex flex-col ${isMe ? "items-end" : "items-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
               <div className={`
-                max-w-[75%] px-4 py-2 text-[16px] leading-snug shadow-md
-                /* UPDATED COLORS FOR BROWN BACKGROUND */
+                max-w-[75%] px-5 py-3 text-[15px] leading-relaxed shadow-sm
                 ${isMe 
-                  ? "bg-[#8D5B4C] text-[#F5F1E8] rounded-[20px] rounded-br-none" /* Warm Terracotta / Off-white text */
-                  : "bg-[#F5F1E8] text-[#3E2723] rounded-[20px] rounded-bl-none" /* Cream background / Dark brown text */
+                  ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-sm" // Mocha Brown / Cream Text
+                  : "bg-[#FFFFFF]/95 backdrop-blur-sm text-[#4A3B32] border border-[#EBE5DE] rounded-2xl rounded-tl-sm" // White Glass / Dark Brown Text
                 }
               `}>
                 {msg.text}
               </div>
+              <span className={`text-[10px] mt-1 px-1 font-medium ${isMe ? "text-[#6F4E37]/70" : "text-[#9C8C7E]"}`}>
+                {/* Timestamp placeholder if needed */}
+              </span>
             </div>
           );
         })}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - slightly warmer tint */}
-      <div className="p-3 bg-[#FDFCF8] border-t border-stone-200 pb-6">
-        <div className="flex items-center gap-2 border border-stone-300 rounded-full px-4 py-1 focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500 transition-all bg-white">
+      {/* Input Area */}
+      <div className="p-4 bg-white/90 backdrop-blur-md border-t border-[#EBE5DE]">
+        <div className="max-w-4xl mx-auto flex items-center gap-3 bg-[#F9F7F5] border border-[#EBE5DE] rounded-[1.5rem] px-2 py-2 focus-within:ring-2 focus-within:ring-[#6F4E37]/10 focus-within:border-[#D7C0AE] transition-all shadow-sm">
           <input 
-            className="flex-1 bg-transparent py-2 outline-none text-base text-gray-900 placeholder-gray-500"
-            placeholder="iMessage"
+            className="flex-1 bg-transparent px-4 py-2 outline-none text-[15px] text-[#4A3B32] placeholder-[#A6988D]"
+            placeholder="Type a message..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />
           <button onClick={handleSend} disabled={!message.trim()} 
-            className={`p-1.5 rounded-full transition-all ${message.trim() ? "bg-blue-600 text-white hover:scale-105" : "bg-gray-300 text-white cursor-default"}`}>
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            className={`p-3 rounded-full transition-all duration-300 ${message.trim() ? "bg-[#6F4E37] text-[#FFF8F0] shadow-md hover:scale-105" : "bg-[#EBE5DE] text-[#FFF8F0] cursor-default"}`}>
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
             </svg>
           </button>
@@ -319,7 +331,14 @@ export default function App() {
     init();
   }, []);
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-white"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (loading) return (
+    <div className="h-screen flex items-center justify-center bg-[#FDFBF7]">
+        <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-[#EBE5DE] border-t-[#6F4E37] rounded-full animate-spin"></div>
+            <p className="text-[#9C8C7E] text-sm font-medium animate-pulse">Loading experience...</p>
+        </div>
+    </div>
+  );
 
   if (!user) return <AuthView onLoginSuccess={setUser} />;
 
