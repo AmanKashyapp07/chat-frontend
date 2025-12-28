@@ -304,16 +304,14 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
  * 3. CHAT VIEW (Private & Group)
  */
 const ChatView = ({ currentUser, activeChat, onBack }) => {
-  const { chatId, type, recipient, name, history } = activeChat; // extracted 'name' and 'type'
+  // Reverted: No 'members' in destructuring
+  const { chatId, type, recipient, name, history } = activeChat; 
   const [messages, setMessages] = useState(history || []);
   const [message, setMessage] = useState("");
   const messagesEndRef = useRef(null);
 
-  // FETCH MESSAGES ON LOAD (Especially for Groups)
+  // FETCH MESSAGES ON LOAD
   useEffect(() => {
-    // We can use the existing socket logic or fetch an API
-    // Let's rely on socket joining room, but we might want to fetch history if empty
-    // For now, assuming standard socket flow
     socket.emit("joinChat", chatId);
 
     const handleReceive = (data) => {
@@ -331,6 +329,7 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
 
   const handleSend = () => {
     if (message.trim()) {
+      // Reverted: Payload does not include senderName
       socket.emit("sendMessage", { 
         chatId: chatId,        
         senderId: currentUser.id, 
@@ -344,9 +343,7 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
     if (!window.confirm("Delete this conversation?")) return;
     try {
       const token = localStorage.getItem("chat_token");
-      // Note: For groups, we might need a different DELETE logic (Leave Group vs Delete Group)
-      // Re-using same endpoint for simplicity, assuming userId passed for verification
-      await api_helper("/api/chats/private", "DELETE", { userId: recipient?.id || 0 }, token); // Logic might need check for groups
+      await api_helper("/api/chats/private", "DELETE", { userId: recipient?.id || 0 }, token);
       onBack();
     } catch (err) { alert("Failed to delete chat."); }
   };
@@ -364,12 +361,13 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
             </button>
             <div className="flex flex-col">
             <span className="text-lg font-serif font-bold text-[#4A3B32]">{chatTitle}</span>
+            {/* Reverted: Simple subtitle logic */}
             <span className="text-[11px] font-medium text-[#9C8C7E] flex items-center gap-1">
                 {type === 'group' ? 'Group Chat' : 'Online'}
             </span>
             </div>
         </div>
-        {/* Only show delete for private for now, or implement logic for group exit */}
+        {/* Only show delete for private for now */}
         {type === 'private' && (
             <button onClick={handleDeleteChat} className="w-10 h-10 flex items-center justify-center rounded-full text-[#9C8C7E] hover:bg-rose-50 hover:text-rose-500 transition-colors">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -385,7 +383,7 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
               <div className={`max-w-[75%] px-5 py-3 text-[15px] leading-relaxed shadow-sm ${isMe ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-sm" : "bg-[#FFFFFF]/95 backdrop-blur-sm text-[#4A3B32] border border-[#EBE5DE] rounded-2xl rounded-tl-sm"}`}>
                 {msg.text}
               </div>
-              {/* If group, maybe show sender name for others */}
+              {/* Reverted: Shows "User ID" instead of Name */}
               {!isMe && type === 'group' && <span className="text-[10px] text-[#9C8C7E] ml-2 mt-1">User {msg.senderId}</span>}
             </div>
           );
