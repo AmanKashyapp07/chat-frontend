@@ -18,6 +18,8 @@ const api_helper = async (endpoint, method = "GET", body = null, token = null) =
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const config = { method, headers };
+  
+  // Allow body for POST, PUT, DELETE
   if (body && method !== "GET") {
     config.body = JSON.stringify(body);
   }
@@ -53,7 +55,6 @@ const AuthView = ({ onLoginSuccess }) => {
       const authData = await api_helper(endpoint, "POST", { username, password });
       
       localStorage.setItem("chat_token", authData.token);
-
       const userProfile = await api_helper("/api/auth/me", "GET", null, authData.token);
       
       onLoginSuccess(userProfile); 
@@ -66,7 +67,6 @@ const AuthView = ({ onLoginSuccess }) => {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#EBE5DE] font-sans relative overflow-hidden">
-      {/* Abstract Background Blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[#D7C0AE] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-[#C0B2A3] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
 
@@ -157,7 +157,8 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
       });
     } catch (err) {
       alert("Could not open chat: " + err.message);
-      setProcessingUser(null); 
+    } finally {
+      setProcessingUser(null);
     }
   };
 
@@ -181,7 +182,6 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
           <div key={u.id} onClick={() => handleUserClick(u)} 
             className={`flex items-center gap-5 p-4 bg-white border border-[#F2EDE6] rounded-2xl cursor-pointer hover:shadow-md hover:border-[#D7C0AE] active:scale-[0.99] transition-all group ${processingUser === u.id ? 'opacity-50 pointer-events-none' : ''}`}>
             
-            {/* Avatar */}
             <div className="w-14 h-14 rounded-full bg-[#F5F0EB] text-[#6F4E37] flex items-center justify-center font-serif text-xl font-bold border border-[#EBE5DE] group-hover:bg-[#6F4E37] group-hover:text-[#FFF8F0] transition-colors">
               {processingUser === u.id ? (
                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
@@ -240,30 +240,59 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
     }
   };
 
+  // --- DELETE CHAT FUNCTIONALITY ---
+  const handleDeleteChat = async () => {
+    if (!window.confirm(`Are you sure you want to delete this entire conversation with ${recipient.username}?`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("chat_token");
+      // Calling DELETE api with userId in body
+      await api_helper("/api/chats/private", "DELETE", { userId: recipient.id }, token);
+      
+      // Navigate back to user list because this Chat ID no longer exists
+      onBack();
+    } catch (err) {
+      alert("Failed to delete chat: " + err.message);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen animate-in slide-in-from-right duration-300 font-sans bg-[#FDFBF7]">
       
       {/* Header - Glassmorphism */}
-      <div className="px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-[#EBE5DE] sticky top-0 z-20 flex items-center gap-4 shadow-sm">
-        <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded-full bg-[#F5F2EF] text-[#6F4E37] hover:bg-[#EBE5DE] transition-colors">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div className="flex flex-col">
-           <span className="text-lg font-serif font-bold text-[#4A3B32]">{recipient.username}</span>
-           <span className="text-[11px] font-medium text-[#9C8C7E] flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Online
-           </span>
+      <div className="px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-[#EBE5DE] sticky top-0 z-20 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+            <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded-full bg-[#F5F2EF] text-[#6F4E37] hover:bg-[#EBE5DE] transition-colors">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            </button>
+            <div className="flex flex-col">
+            <span className="text-lg font-serif font-bold text-[#4A3B32]">{recipient.username}</span>
+            <span className="text-[11px] font-medium text-[#9C8C7E] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Online
+            </span>
+            </div>
         </div>
+
+        {/* DELETE BUTTON (IN HEADER) */}
+        <button 
+            onClick={handleDeleteChat}
+            title="Delete Conversation"
+            className="w-10 h-10 flex items-center justify-center rounded-full text-[#9C8C7E] hover:bg-rose-50 hover:text-rose-500 transition-colors"
+        >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </button>
       </div>
 
-      {/* Messages Area - SOLID COLOR BG UPDATED HERE */}
+      {/* Messages Area - SOLID COLOR BG */}
       <div 
         className="flex-1 overflow-y-auto p-6 space-y-4"
-        style={{ 
-            backgroundColor: '#F2EBE5' // Warm Latte Foam color to match theme
-        }}
+        style={{ backgroundColor: '#F2EBE5' }}
       >
         {messages.map((msg, i) => {
           const isMe = msg.senderId == currentUser.id; 
@@ -273,15 +302,12 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
               <div className={`
                 max-w-[75%] px-5 py-3 text-[15px] leading-relaxed shadow-sm
                 ${isMe 
-                  ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-sm" // Mocha Brown / Cream Text
-                  : "bg-[#FFFFFF]/95 backdrop-blur-sm text-[#4A3B32] border border-[#EBE5DE] rounded-2xl rounded-tl-sm" // White Glass / Dark Brown Text
+                  ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-sm" 
+                  : "bg-[#FFFFFF]/95 backdrop-blur-sm text-[#4A3B32] border border-[#EBE5DE] rounded-2xl rounded-tl-sm"
                 }
               `}>
                 {msg.text}
               </div>
-              <span className={`text-[10px] mt-1 px-1 font-medium ${isMe ? "text-[#6F4E37]/70" : "text-[#9C8C7E]"}`}>
-                {/* Timestamp placeholder if needed */}
-              </span>
             </div>
           );
         })}
