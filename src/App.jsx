@@ -5,38 +5,26 @@ import { io } from "socket.io-client";
 const API_BASE_URL = "http://localhost:8000";
 const SOCKET_URL = "http://localhost:8000";
 
-// Initialize Socket outside component
-const socket = io(SOCKET_URL, {
-  autoConnect: true,
-});
+const socket = io(SOCKET_URL, { autoConnect: true });
 
-/**
- * API HELPER
- */
+// --- API HELPER ---
 const api_helper = async (endpoint, method = "GET", body = null, token = null) => {
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-
   const config = { method, headers };
-  
-  // Allow body for POST, PUT, DELETE
-  if (body && method !== "GET") {
-    config.body = JSON.stringify(body);
-  }
+  if (body && method !== "GET") config.body = JSON.stringify(body);
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
     throw new Error(errData.message || `Error ${response.status}`);
   }
-
   if (response.status === 204) return {};
   return await response.json();
 };
 
 /**
- * 1. AUTH VIEW (Login / Signup)
+ * 1. AUTH VIEW (Unchanged)
  */
 const AuthView = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -120,46 +108,105 @@ const AuthView = ({ onLoginSuccess }) => {
 };
 
 /**
- * 2. USER LIST VIEW (Dashboard)
+ * 2. DASHBOARD VIEW (Users & Groups)
  */
 const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState([]);      // List of all users
+  const [groups, setGroups] = useState([]);    // List of my groups
+  const [view, setView] = useState("users");   // Toggle between 'users' and 'groups'
   const [loading, setLoading] = useState(true);
-  const [processingUser, setProcessingUser] = useState(null); 
+  
+  // Modal State
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState([]);
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const token = localStorage.getItem("chat_token");
-        const data = await api_helper("/api/users", "GET", null, token);
-        setUsers(data);
-      } catch (e) {
-        console.error("Failed to fetch users");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUsers();
+    fetchData();
   }, []);
 
-  const handleUserClick = async (targetUser) => {
-    if (processingUser) return; 
-    setProcessingUser(targetUser.id);
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("chat_token");
+      const [usersData, groupsData] = await Promise.all([
+        api_helper("/api/users", "GET", null, token),
+        api_helper("/api/chats/group", "GET", null, token) // Needs the new backend route
+      ]);
+      setUsers(usersData);
+      setGroups(groupsData);
+    } catch (e) {
+      console.error("Fetch failed", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // --- START PRIVATE CHAT ---
+  const handleUserClick = async (targetUser) => {
     try {
       const token = localStorage.getItem("chat_token");
       const res = await api_helper("/api/chats/private", "POST", { userId: targetUser.id }, token);
-      
       onChatSelect({ 
         chatId: res.chatId, 
-        recipient: targetUser,
+        recipient: targetUser, // Passed for Header Info
+        type: 'private',
         history: res.messages || [] 
       });
+    } catch (err) { alert(err.message); }
+  };
+
+  // --- OPEN GROUP CHAT ---
+  const handleGroupClick = async (group) => {
+    try {
+      const token = localStorage.getItem("chat_token");
+      
+      // CHANGED: Pass ID in URL, use GET method, no body (null)
+      const history = await api_helper(
+        `/api/chats/group/fetch/${group.id}`, 
+        "GET", 
+        null, 
+        token
+      );
+
+      onChatSelect({
+        chatId: group.id,
+        name: group.name,
+        type: 'group',
+        history: history || [] 
+      });
+
     } catch (err) {
-      alert("Could not open chat: " + err.message);
-    } finally {
-      setProcessingUser(null);
+      console.error("Failed to load group history", err);
+      // Fallback: Open empty chat
+      onChatSelect({
+        chatId: group.id,
+        name: group.name,
+        type: 'group',
+        history: []
+      });
     }
+  };
+
+  // --- CREATE GROUP LOGIC ---
+  const toggleMemberSelection = (userId) => {
+    if (selectedMembers.includes(userId)) {
+      setSelectedMembers(prev => prev.filter(id => id !== userId));
+    } else {
+      setSelectedMembers(prev => [...prev, userId]);
+    }
+  };
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim() || selectedMembers.length === 0) return alert("Name and members required");
+    try {
+      const token = localStorage.getItem("chat_token");
+      await api_helper("/api/chats/group", "POST", { name: newGroupName, memberIds: selectedMembers }, token);
+      setShowCreateGroup(false);
+      setNewGroupName("");
+      setSelectedMembers([]);
+      fetchData(); // Refresh list
+    } catch (err) { alert(err.message); }
   };
 
   return (
@@ -167,55 +214,108 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
       {/* Header */}
       <div className="px-8 py-6 bg-white/80 backdrop-blur-md border-b border-[#EEE5DB] sticky top-0 z-10 flex justify-between items-center shadow-sm">
         <div>
-          <h1 className="text-2xl font-serif font-bold tracking-tight text-[#4A3B32]">Messages</h1>
-          <p className="text-xs font-medium text-[#9C8C7E] mt-0.5">Connected as {currentUser.username}</p>
+          <h1 className="text-2xl font-serif font-bold tracking-tight text-[#4A3B32]">Chats</h1>
+          <p className="text-xs font-medium text-[#9C8C7E]">Hi, {currentUser.username}</p>
         </div>
-        <button onClick={onLogout} className="text-[#6F4E37] hover:text-white font-medium text-xs border border-[#6F4E37] px-4 py-2 rounded-full hover:bg-[#6F4E37] transition-all">
-          Sign Out
-        </button>
+        <div className="flex gap-2">
+            <button onClick={() => setShowCreateGroup(true)} className="text-[#FFF8F0] bg-[#6F4E37] text-xs px-4 py-2 rounded-full hover:bg-[#5A3E2B] transition-all">
+               + New Group
+            </button>
+            <button onClick={onLogout} className="text-[#6F4E37] border border-[#6F4E37] text-xs px-4 py-2 rounded-full hover:bg-[#6F4E37] hover:text-white transition-all">
+               Logout
+            </button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-2">
-        {loading ? <div className="text-center mt-10 text-[#9C8C7E]">Loading contacts...</div> : 
-         users.length === 0 ? <div className="text-center mt-10 text-[#9C8C7E]">No contacts found.</div> :
-         users.map((u) => (
-          <div key={u.id} onClick={() => handleUserClick(u)} 
-            className={`flex items-center gap-5 p-4 bg-white border border-[#F2EDE6] rounded-2xl cursor-pointer hover:shadow-md hover:border-[#D7C0AE] active:scale-[0.99] transition-all group ${processingUser === u.id ? 'opacity-50 pointer-events-none' : ''}`}>
-            
-            <div className="w-14 h-14 rounded-full bg-[#F5F0EB] text-[#6F4E37] flex items-center justify-center font-serif text-xl font-bold border border-[#EBE5DE] group-hover:bg-[#6F4E37] group-hover:text-[#FFF8F0] transition-colors">
-              {processingUser === u.id ? (
-                 <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-              ) : u.username[0].toUpperCase()}
-            </div>
-
-            <div className="flex-1">
-              <h3 className="font-semibold text-[#4A3B32] text-lg">{u.username}</h3>
-              <p className="text-[#9C8C7E] text-sm group-hover:text-[#6F4E37] transition-colors">Tap to start conversation</p>
-            </div>
-            
-            <div className="w-8 h-8 rounded-full bg-[#F9F7F5] flex items-center justify-center text-[#D7C0AE] group-hover:text-[#6F4E37] group-hover:bg-[#F0EBE5] transition-all">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
-          </div>
-        ))}
+      {/* Toggle Tabs */}
+      <div className="flex px-6 pt-4 gap-4">
+        <button onClick={() => setView("users")} className={`pb-2 text-sm font-bold transition-all ${view === "users" ? "text-[#6F4E37] border-b-2 border-[#6F4E37]" : "text-[#9C8C7E]"}`}>Direct Messages</button>
+        <button onClick={() => setView("groups")} className={`pb-2 text-sm font-bold transition-all ${view === "groups" ? "text-[#6F4E37] border-b-2 border-[#6F4E37]" : "text-[#9C8C7E]"}`}>My Groups</button>
       </div>
+
+      {/* Lists */}
+      <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-2 pb-10">
+        {loading ? <div className="text-center mt-10 text-[#9C8C7E]">Loading...</div> : (
+            view === "users" ? (
+                // USER LIST
+                users.map(u => (
+                    <div key={u.id} onClick={() => handleUserClick(u)} className="flex items-center gap-4 p-4 bg-white border border-[#F2EDE6] rounded-2xl cursor-pointer hover:shadow-md transition-all">
+                        <div className="w-10 h-10 rounded-full bg-[#F5F0EB] text-[#6F4E37] flex items-center justify-center font-bold">
+                            {u.username[0].toUpperCase()}
+                        </div>
+                        <div className="flex-1"><h3 className="font-semibold text-[#4A3B32]">{u.username}</h3></div>
+                    </div>
+                ))
+            ) : (
+                // GROUP LIST
+                groups.length === 0 ? <p className="text-center text-[#9C8C7E] mt-10">No groups yet.</p> :
+                groups.map(g => (
+                    <div key={g.id} onClick={() => handleGroupClick(g)} className="flex items-center gap-4 p-4 bg-white border border-[#F2EDE6] rounded-2xl cursor-pointer hover:shadow-md transition-all">
+                         <div className="w-10 h-10 rounded-full bg-[#D7C0AE] text-[#FFF8F0] flex items-center justify-center font-bold">
+                            #
+                        </div>
+                        <div className="flex-1"><h3 className="font-semibold text-[#4A3B32]">{g.name}</h3></div>
+                    </div>
+                ))
+            )
+        )}
+      </div>
+
+      {/* CREATE GROUP MODAL */}
+      {showCreateGroup && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in duration-200">
+                <h2 className="text-xl font-bold text-[#4A3B32] mb-4">Create New Group</h2>
+                
+                <input 
+                    className="w-full px-4 py-3 bg-[#F5F2EF] rounded-xl text-[#4A3B32] outline-none mb-4"
+                    placeholder="Group Name"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                />
+                
+                <p className="text-sm font-bold text-[#9C8C7E] mb-2">Select Members:</p>
+                <div className="h-40 overflow-y-auto space-y-2 mb-6 border border-[#F2EDE6] p-2 rounded-xl">
+                    {users.map(u => (
+                         u.id !== currentUser.id && (
+                            <div key={u.id} onClick={() => toggleMemberSelection(u.id)} 
+                                className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${selectedMembers.includes(u.id) ? "bg-[#6F4E37] text-white" : "hover:bg-[#F5F2EF]"}`}>
+                                <div className={`w-4 h-4 border rounded-full flex items-center justify-center ${selectedMembers.includes(u.id) ? "bg-white border-white" : "border-[#9C8C7E]"}`}>
+                                    {selectedMembers.includes(u.id) && <div className="w-2 h-2 bg-[#6F4E37] rounded-full"></div>}
+                                </div>
+                                <span className="font-medium">{u.username}</span>
+                            </div>
+                         )
+                    ))}
+                </div>
+
+                <div className="flex gap-3">
+                    <button onClick={() => setShowCreateGroup(false)} className="flex-1 py-3 text-[#6F4E37] font-bold hover:bg-[#F5F2EF] rounded-xl transition-colors">Cancel</button>
+                    <button onClick={handleCreateGroup} className="flex-1 py-3 bg-[#6F4E37] text-white font-bold rounded-xl hover:bg-[#5A3E2B] transition-colors">Create</button>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 };
 
 /**
- * 3. CHAT VIEW (Private Conversation)
+ * 3. CHAT VIEW (Private & Group)
  */
 const ChatView = ({ currentUser, activeChat, onBack }) => {
-  const { chatId, recipient, history } = activeChat;
+  const { chatId, type, recipient, name, history } = activeChat; // extracted 'name' and 'type'
   const [messages, setMessages] = useState(history || []);
   const [message, setMessage] = useState("");
   const messagesEndRef = useRef(null);
 
+  // FETCH MESSAGES ON LOAD (Especially for Groups)
   useEffect(() => {
+    // We can use the existing socket logic or fetch an API
+    // Let's rely on socket joining room, but we might want to fetch history if empty
+    // For now, assuming standard socket flow
     socket.emit("joinChat", chatId);
+
     const handleReceive = (data) => {
       if (data.chatId == chatId) {
         setMessages((prev) => [...prev, data]);
@@ -240,95 +340,64 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
     }
   };
 
-  // --- DELETE CHAT FUNCTIONALITY ---
   const handleDeleteChat = async () => {
-    if (!window.confirm(`Are you sure you want to delete this entire conversation with ${recipient.username}?`)) {
-      return;
-    }
-
+    if (!window.confirm("Delete this conversation?")) return;
     try {
       const token = localStorage.getItem("chat_token");
-      // Calling DELETE api with userId in body
-      await api_helper("/api/chats/private", "DELETE", { userId: recipient.id }, token);
-      
-      // Navigate back to user list because this Chat ID no longer exists
+      // Note: For groups, we might need a different DELETE logic (Leave Group vs Delete Group)
+      // Re-using same endpoint for simplicity, assuming userId passed for verification
+      await api_helper("/api/chats/private", "DELETE", { userId: recipient?.id || 0 }, token); // Logic might need check for groups
       onBack();
-    } catch (err) {
-      alert("Failed to delete chat: " + err.message);
-    }
+    } catch (err) { alert("Failed to delete chat."); }
   };
+
+  // Determine Title: If Group -> 'name', If Private -> 'recipient.username'
+  const chatTitle = type === 'group' ? name : recipient.username;
 
   return (
     <div className="flex flex-col h-screen animate-in slide-in-from-right duration-300 font-sans bg-[#FDFBF7]">
-      
-      {/* Header - Glassmorphism */}
+      {/* Header */}
       <div className="px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-[#EBE5DE] sticky top-0 z-20 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded-full bg-[#F5F2EF] text-[#6F4E37] hover:bg-[#EBE5DE] transition-colors">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             </button>
             <div className="flex flex-col">
-            <span className="text-lg font-serif font-bold text-[#4A3B32]">{recipient.username}</span>
+            <span className="text-lg font-serif font-bold text-[#4A3B32]">{chatTitle}</span>
             <span className="text-[11px] font-medium text-[#9C8C7E] flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Online
+                {type === 'group' ? 'Group Chat' : 'Online'}
             </span>
             </div>
         </div>
-
-        {/* DELETE BUTTON (IN HEADER) */}
-        <button 
-            onClick={handleDeleteChat}
-            title="Delete Conversation"
-            className="w-10 h-10 flex items-center justify-center rounded-full text-[#9C8C7E] hover:bg-rose-50 hover:text-rose-500 transition-colors"
-        >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-        </button>
+        {/* Only show delete for private for now, or implement logic for group exit */}
+        {type === 'private' && (
+            <button onClick={handleDeleteChat} className="w-10 h-10 flex items-center justify-center rounded-full text-[#9C8C7E] hover:bg-rose-50 hover:text-rose-500 transition-colors">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </button>
+        )}
       </div>
 
-      {/* Messages Area - SOLID COLOR BG */}
-      <div 
-        className="flex-1 overflow-y-auto p-6 space-y-4"
-        style={{ backgroundColor: '#F2EBE5' }}
-      >
+      <div className="flex-1 overflow-y-auto p-6 space-y-4" style={{ backgroundColor: '#F2EBE5' }}>
         {messages.map((msg, i) => {
           const isMe = msg.senderId == currentUser.id; 
-          
           return (
             <div key={i} className={`flex flex-col ${isMe ? "items-end" : "items-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-              <div className={`
-                max-w-[75%] px-5 py-3 text-[15px] leading-relaxed shadow-sm
-                ${isMe 
-                  ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-sm" 
-                  : "bg-[#FFFFFF]/95 backdrop-blur-sm text-[#4A3B32] border border-[#EBE5DE] rounded-2xl rounded-tl-sm"
-                }
-              `}>
+              <div className={`max-w-[75%] px-5 py-3 text-[15px] leading-relaxed shadow-sm ${isMe ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-sm" : "bg-[#FFFFFF]/95 backdrop-blur-sm text-[#4A3B32] border border-[#EBE5DE] rounded-2xl rounded-tl-sm"}`}>
                 {msg.text}
               </div>
+              {/* If group, maybe show sender name for others */}
+              {!isMe && type === 'group' && <span className="text-[10px] text-[#9C8C7E] ml-2 mt-1">User {msg.senderId}</span>}
             </div>
           );
         })}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="p-4 bg-white/90 backdrop-blur-md border-t border-[#EBE5DE]">
         <div className="max-w-4xl mx-auto flex items-center gap-3 bg-[#F9F7F5] border border-[#EBE5DE] rounded-[1.5rem] px-2 py-2 focus-within:ring-2 focus-within:ring-[#6F4E37]/10 focus-within:border-[#D7C0AE] transition-all shadow-sm">
-          <input 
-            className="flex-1 bg-transparent px-4 py-2 outline-none text-[15px] text-[#4A3B32] placeholder-[#A6988D]"
-            placeholder="Type a message..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          />
-          <button onClick={handleSend} disabled={!message.trim()} 
-            className={`p-3 rounded-full transition-all duration-300 ${message.trim() ? "bg-[#6F4E37] text-[#FFF8F0] shadow-md hover:scale-105" : "bg-[#EBE5DE] text-[#FFF8F0] cursor-default"}`}>
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-            </svg>
+          <input className="flex-1 bg-transparent px-4 py-2 outline-none text-[15px] text-[#4A3B32] placeholder-[#A6988D]" placeholder="Type a message..." value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} />
+          <button onClick={handleSend} disabled={!message.trim()} className={`p-3 rounded-full transition-all duration-300 ${message.trim() ? "bg-[#6F4E37] text-[#FFF8F0] shadow-md hover:scale-105" : "bg-[#EBE5DE] text-[#FFF8F0] cursor-default"}`}>
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" /></svg>
           </button>
         </div>
       </div>
@@ -348,27 +417,15 @@ export default function App() {
         try {
           const data = await api_helper("/api/auth/me", "GET", null, token);
           setUser(data);
-        } catch {
-          localStorage.removeItem("chat_token");
-        }
+        } catch { localStorage.removeItem("chat_token"); }
       }
       setLoading(false);
     };
     init();
   }, []);
 
-  if (loading) return (
-    <div className="h-screen flex items-center justify-center bg-[#FDFBF7]">
-        <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-[#EBE5DE] border-t-[#6F4E37] rounded-full animate-spin"></div>
-            <p className="text-[#9C8C7E] text-sm font-medium animate-pulse">Loading experience...</p>
-        </div>
-    </div>
-  );
-
+  if (loading) return <div className="h-screen flex items-center justify-center bg-[#FDFBF7]"><div className="w-12 h-12 border-4 border-[#EBE5DE] border-t-[#6F4E37] rounded-full animate-spin"></div></div>;
   if (!user) return <AuthView onLoginSuccess={setUser} />;
-
   if (activeChat) return <ChatView currentUser={user} activeChat={activeChat} onBack={() => setActiveChat(null)} />;
-
   return <UserListView currentUser={user} onChatSelect={setActiveChat} onLogout={() => { localStorage.removeItem("chat_token"); setUser(null); window.location.reload(); }} />;
 }
