@@ -304,14 +304,23 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
  * 3. CHAT VIEW (Private & Group)
  */
 const ChatView = ({ currentUser, activeChat, onBack }) => {
-  // Reverted: No 'members' in destructuring
   const { chatId, type, recipient, name, history } = activeChat; 
+  
+  // --- STATE DEFINITIONS ---
   const [messages, setMessages] = useState(history || []);
   const [message, setMessage] = useState("");
+  
+  // FIX: These three lines must be here for the members popup to work
+  const [showMembers, setShowMembers] = useState(false);
+  const [membersList, setMembersList] = useState([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false); 
+  // -------------------------
+
   const messagesEndRef = useRef(null);
 
   // FETCH MESSAGES ON LOAD
   useEffect(() => {
+    // Assuming 'socket' is defined globally or imported
     socket.emit("joinChat", chatId);
 
     const handleReceive = (data) => {
@@ -329,7 +338,6 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
 
   const handleSend = () => {
     if (message.trim()) {
-      // Reverted: Payload does not include senderName
       socket.emit("sendMessage", { 
         chatId: chatId,        
         senderId: currentUser.id, 
@@ -348,25 +356,97 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
     } catch (err) { alert("Failed to delete chat."); }
   };
 
-  // Determine Title: If Group -> 'name', If Private -> 'recipient.username'
+  // --- FETCH MEMBERS FUNCTION ---
+  const handleFetchMembers = async () => {
+    // Toggle off if already showing
+    if (showMembers) {
+        setShowMembers(false);
+        return;
+    }
+    
+    // Set loading state (This caused your error before because the state wasn't defined)
+    setIsLoadingMembers(true);
+    
+    try {
+        const token = localStorage.getItem("chat_token");
+        const response = await fetch(`http://localhost:8000/api/chats/group/fetch/${chatId}/members`, {
+            headers: { "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            // Expecting data format: ["Name1", "Name2", "Name3"]
+            setMembersList(data); 
+            setShowMembers(true);
+        } else {
+            console.error("Failed to fetch members");
+        }
+    } catch (error) {
+        console.error("Error fetching members:", error);
+    } finally {
+        setIsLoadingMembers(false);
+    }
+  };
+
   const chatTitle = type === 'group' ? name : recipient.username;
 
   return (
     <div className="flex flex-col h-screen animate-in slide-in-from-right duration-300 font-sans bg-[#FDFBF7]">
       {/* Header */}
-      <div className="px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-[#EBE5DE] sticky top-0 z-20 flex items-center justify-between shadow-sm">
+      <div className="px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-[#EBE5DE] sticky top-0 z-20 flex items-center justify-between shadow-sm relative">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded-full bg-[#F5F2EF] text-[#6F4E37] hover:bg-[#EBE5DE] transition-colors">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             </button>
             <div className="flex flex-col">
             <span className="text-lg font-serif font-bold text-[#4A3B32]">{chatTitle}</span>
-            {/* Reverted: Simple subtitle logic */}
             <span className="text-[11px] font-medium text-[#9C8C7E] flex items-center gap-1">
-                {type === 'group' ? 'Group Chat' : 'Online'}
+                {type === 'group' ? (
+                    <button 
+                        onClick={handleFetchMembers} 
+                        className="hover:text-[#6F4E37] hover:underline decoration-dotted cursor-pointer transition-colors"
+                    >
+                        Members
+                    </button>
+                ) : (
+                    'Online'
+                )}
             </span>
             </div>
         </div>
+
+        {/* --- MEMBERS POPUP --- */}
+        {showMembers && type === 'group' && (
+            <div className="absolute top-16 left-16 z-50 w-64 bg-white shadow-xl rounded-xl border border-[#EBE5DE] p-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center mb-3 border-b border-[#F5F2EF] pb-2">
+                    <h3 className="font-bold text-[#4A3B32] text-sm">Group Members</h3>
+                    <button onClick={() => setShowMembers(false)} className="text-[#9C8C7E] hover:text-rose-500">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                
+                {isLoadingMembers ? (
+                    <div className="text-xs text-[#9C8C7E] p-2 text-center">Loading...</div>
+                ) : (
+                    <ul className="max-h-48 overflow-y-auto space-y-2 custom-scrollbar">
+                        {membersList && membersList.length > 0 ? (
+                            membersList.map((member, index) => (
+                                <li key={index} className="text-sm text-[#6F4E37] flex items-center gap-2 p-1 hover:bg-[#F9F7F5] rounded">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#D7C0AE]"></span>
+                                    {/* Direct string rendering for ["Lakshya", "Maverick"...] */}
+                                    {member}
+                                </li>
+                            ))
+                        ) : (
+                            <li className="text-xs text-gray-400 italic">No members found</li>
+                        )}
+                    </ul>
+                )}
+            </div>
+        )}
+        {/* --------------------- */}
+
         {/* Only show delete for private for now */}
         {type === 'private' && (
             <button onClick={handleDeleteChat} className="w-10 h-10 flex items-center justify-center rounded-full text-[#9C8C7E] hover:bg-rose-50 hover:text-rose-500 transition-colors">
@@ -383,7 +463,6 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
               <div className={`max-w-[75%] px-5 py-3 text-[15px] leading-relaxed shadow-sm ${isMe ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-sm" : "bg-[#FFFFFF]/95 backdrop-blur-sm text-[#4A3B32] border border-[#EBE5DE] rounded-2xl rounded-tl-sm"}`}>
                 {msg.text}
               </div>
-              {/* Reverted: Shows "User ID" instead of Name */}
               {!isMe && type === 'group' && <span className="text-[10px] text-[#9C8C7E] ml-2 mt-1">User {msg.senderId}</span>}
             </div>
           );
