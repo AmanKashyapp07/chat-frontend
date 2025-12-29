@@ -455,15 +455,32 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4" style={{ backgroundColor: '#F2EBE5' }}>
+      <div className="flex-1 overflow-y-auto p-6 space-y-2" style={{ backgroundColor: '#F2EBE5' }}> 
         {messages.map((msg, i) => {
           const isMe = msg.senderId == currentUser.id; 
+          
           return (
             <div key={i} className={`flex flex-col ${isMe ? "items-end" : "items-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-              <div className={`max-w-[75%] px-5 py-3 text-[15px] leading-relaxed shadow-sm ${isMe ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-sm" : "bg-[#FFFFFF]/95 backdrop-blur-sm text-[#4A3B32] border border-[#EBE5DE] rounded-2xl rounded-tl-sm"}`}>
-                {msg.text}
+              
+              <div className={`max-w-[75%] px-3 py-2 shadow-sm ${
+                isMe 
+                  ? "bg-[#6F4E37] text-[#FFF8F0] rounded-2xl rounded-tr-none" 
+                  : "bg-white text-[#4A3B32] rounded-2xl rounded-tl-none border border-[#EBE5DE]/50"
+              }`}>
+                
+                {/* SENDER NAME (Only inside bubble for received group messages) */}
+                {!isMe && type === 'group' && (
+                  <p className="text-[12px] font-bold text-orange-700 mb-0.5 leading-tight">
+                    {msg.sender_name}
+                  </p>
+                )}
+
+                {/* MESSAGE TEXT */}
+                <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                  {msg.text}
+                </p>
+
               </div>
-              {!isMe && type === 'group' && <span className="text-[10px] text-[#9C8C7E] ml-2 mt-1">User {msg.senderId}</span>}
             </div>
           );
         })}
