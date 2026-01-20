@@ -1,35 +1,45 @@
 import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 
-// --- CONFIGURATION ---
 const API_BASE_URL = "http://localhost:8000";
 const SOCKET_URL = "http://localhost:8000";
 
+/**
+ * --- SOCKET.IO CLIENT SETUP ---
+ * Initializes the Socket.IO client. `autoConnect: true` attempts to connect immediately.
+ */
 const socket = io(SOCKET_URL, { autoConnect: true });
 
-// --- API HELPER ---
 const api_helper = async (
   endpoint,
   method = "GET",
   body = null,
-  token = null
+  token = null,
 ) => {
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const config = { method, headers };
   if (body && method !== "GET") config.body = JSON.stringify(body);
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
     throw new Error(errData.message || `Error ${response.status}`);
   }
+
   if (response.status === 204) return {};
+
   return await response.json();
 };
 
 /**
- * 1. AUTH VIEW (Unchanged)
+ * --- 1. AUTHENTICATION VIEW ---
+ * This component handles both user login and registration.
+ * It presents a form and communicates with the backend to authenticate the user.
+ * @param {object} props - Component props.
+ * @param {function} props.onLoginSuccess - Callback function to execute upon successful login.
  */
 const AuthView = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -38,6 +48,10 @@ const AuthView = ({ onLoginSuccess }) => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Handles the form submission for both login and signup.
+   * @param {React.FormEvent<HTMLFormElement>} e - The form submission event.
+   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -45,6 +59,7 @@ const AuthView = ({ onLoginSuccess }) => {
 
     try {
       const endpoint = isLogin ? "/api/auth/login" : "/api/auth/signup";
+      // Authenticate and get a token
       const authData = await api_helper(endpoint, "POST", {
         username,
         password,
@@ -52,10 +67,11 @@ const AuthView = ({ onLoginSuccess }) => {
 
       localStorage.setItem("chat_token", authData.token);
       const userProfile = await api_helper(
+        // Fetch the user's profile data
         "/api/auth/me",
         "GET",
         null,
-        authData.token
+        authData.token,
       );
 
       onLoginSuccess(userProfile);
@@ -149,20 +165,29 @@ const AuthView = ({ onLoginSuccess }) => {
 };
 
 /**
- * 2. DASHBOARD VIEW (Users & Groups)
+ * --- 2. DASHBOARD VIEW ---
+ * This component serves as the main dashboard after a user logs in.
+ * It displays lists of users for direct messaging and groups the user is a part of.
+ * It also includes functionality to create new groups.
+ * @param {object} props - Component props.
+ * @param {object} props.currentUser - The currently logged-in user object.
+ * @param {function} props.onChatSelect - Callback to select a chat and switch to the ChatView.
+ * @param {function} props.onLogout - Callback to log the user out.
+ * @param {object} props.onlineUsers - An object indicating the online status of users.
  */
-const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
-  const [users, setUsers] = useState([]); // List of all users
-  const [groups, setGroups] = useState([]); // List of my groups
-  const [view, setView] = useState("users"); // Toggle between 'users' and 'groups'
+const UserListView = ({ currentUser, onChatSelect, onLogout, onlineUsers }) => {
+  const [users, setUsers] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [view, setView] = useState("users"); // Toggles between 'users' and 'groups' list
   const [loading, setLoading] = useState(true);
 
-  // Modal State
+  // State for the "Create Group" modal
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
 
   useEffect(() => {
+    // Fetch initial data when the component mounts
     fetchData();
   }, []);
 
@@ -172,7 +197,7 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
       const token = localStorage.getItem("chat_token");
       const [usersData, groupsData] = await Promise.all([
         api_helper("/api/users", "GET", null, token),
-        api_helper("/api/chats/group", "GET", null, token), // Needs the new backend route
+        api_helper("/api/chats/group", "GET", null, token),
       ]);
       setUsers(usersData);
       setGroups(groupsData);
@@ -183,7 +208,10 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
     }
   };
 
-  // --- START PRIVATE CHAT ---
+  /**
+   * Initiates a private chat with a selected user.
+   * @param {object} targetUser - The user object to start a chat with.
+   */
   const handleUserClick = async (targetUser) => {
     try {
       const token = localStorage.getItem("chat_token");
@@ -191,11 +219,11 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
         "/api/chats/private",
         "POST",
         { userId: targetUser.id },
-        token
+        token,
       );
       onChatSelect({
         chatId: res.chatId,
-        recipient: targetUser, // Passed for Header Info
+        recipient: targetUser,
         type: "private",
         history: res.messages || [],
       });
@@ -204,17 +232,19 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
     }
   };
 
-  // --- OPEN GROUP CHAT ---
+  /**
+   * Opens a group chat and fetches its message history.
+   * @param {object} group - The group object to open.
+   */
   const handleGroupClick = async (group) => {
     try {
       const token = localStorage.getItem("chat_token");
 
-      // CHANGED: Pass ID in URL, use GET method, no body (null)
       const history = await api_helper(
-        `/api/chats/group/fetch/${group.id}`,
+        `/api/chats/group/fetch/${group.id}`, // Pass ID in URL, use GET method
         "GET",
         null,
-        token
+        token,
       );
 
       onChatSelect({
@@ -225,7 +255,7 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
       });
     } catch (err) {
       console.error("Failed to load group history", err);
-      // Fallback: Open empty chat
+      // Fallback to opening an empty chat if history fetch fails
       onChatSelect({
         chatId: group.id,
         name: group.name,
@@ -235,7 +265,10 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
     }
   };
 
-  // --- CREATE GROUP LOGIC ---
+  /**
+   * Toggles the selection of a user for a new group.
+   * @param {string} userId - The ID of the user to toggle.
+   */
   const toggleMemberSelection = (userId) => {
     if (selectedMembers.includes(userId)) {
       setSelectedMembers((prev) => prev.filter((id) => id !== userId));
@@ -244,6 +277,9 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
     }
   };
 
+  /**
+   * Handles the creation of a new group.
+   */
   const handleCreateGroup = async () => {
     if (!newGroupName.trim() || selectedMembers.length === 0)
       return alert("Name and members required");
@@ -253,12 +289,12 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
         "/api/chats/group",
         "POST",
         { name: newGroupName, memberIds: selectedMembers },
-        token
+        token,
       );
       setShowCreateGroup(false);
       setNewGroupName("");
       setSelectedMembers([]);
-      fetchData(); // Refresh list
+      fetchData(); // Refresh the group list
     } catch (err) {
       alert(err.message);
     }
@@ -328,8 +364,11 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
               onClick={() => handleUserClick(u)}
               className="flex items-center gap-4 p-4 bg-white border border-[#F2EDE6] rounded-2xl cursor-pointer hover:shadow-md transition-all"
             >
-              <div className="w-10 h-10 rounded-full bg-[#F5F0EB] text-[#6F4E37] flex items-center justify-center font-bold">
+              <div className="relative w-10 h-10 rounded-full bg-[#F5F0EB] text-[#6F4E37] flex items-center justify-center font-bold">
                 {u.username[0].toUpperCase()}
+                {onlineUsers[u.id] && (
+                  <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white"></span>
+                )}
               </div>
               <div className="flex-1">
                 <h3 className="font-semibold text-[#4A3B32]">{u.username}</h3>
@@ -401,7 +440,7 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
                       </div>
                       <span className="font-medium">{u.username}</span>
                     </div>
-                  )
+                  ),
               )}
             </div>
 
@@ -427,26 +466,33 @@ const UserListView = ({ currentUser, onChatSelect, onLogout }) => {
 };
 
 /**
- * 3. CHAT VIEW (Private & Group)
+ * --- 3. CHAT VIEW ---
+ * This component displays the active chat conversation, whether it's private or a group.
+ * It handles sending and receiving messages via WebSockets.
+ * @param {object} props - Component props.
+ * @param {object} props.currentUser - The currently logged-in user object.
+ * @param {object} props.activeChat - The active chat session's data.
+ * @param {function} props.onBack - Callback to return to the UserListView.
+ * @param {boolean} props.isRecipientOnline - Whether the recipient in a private chat is online.
  */
-const ChatView = ({ currentUser, activeChat, onBack }) => {
+const ChatView = ({ currentUser, activeChat, onBack, isRecipientOnline }) => {
   const { chatId, type, recipient, name, history } = activeChat;
 
-  // --- STATE DEFINITIONS ---
+  // State for messages in the current chat and the new message input
   const [messages, setMessages] = useState(history || []);
   const [message, setMessage] = useState("");
 
-  // FIX: These three lines must be here for the members popup to work
+  // State for the group members popup
   const [showMembers, setShowMembers] = useState(false);
   const [membersList, setMembersList] = useState([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  // -------------------------
 
+  // Ref to automatically scroll to the latest message
   const messagesEndRef = useRef(null);
 
-  // FETCH MESSAGES ON LOAD
+  // Effect to handle WebSocket events for the active chat
   useEffect(() => {
-    // Assuming 'socket' is defined globally or imported
+    // Join the specific chat room on the socket server
     socket.emit("joinChat", chatId);
 
     const handleReceive = (data) => {
@@ -455,26 +501,36 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
       }
     };
     socket.on("receiveMessage", handleReceive);
+
+    // Clean up the socket listener when the component unmounts or chatId changes
     return () => {
       socket.off("receiveMessage", handleReceive);
     };
   }, [chatId]);
 
+  // Effect to scroll to the bottom whenever new messages are added
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  /**
+   * Sends a new message through the socket.
+   */
   const handleSend = () => {
     if (message.trim()) {
       socket.emit("sendMessage", {
         chatId: chatId,
         senderId: currentUser.id,
         text: message,
+        // The backend will add sender_name for group chats
       });
       setMessage("");
     }
   };
 
+  /**
+   * Deletes a private chat or clears the history of a group chat.
+   */
   const handleDeleteChat = async () => {
     if (!window.confirm("Delete this conversation?")) return;
 
@@ -482,20 +538,20 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
       const token = localStorage.getItem("chat_token");
 
       if (type === "private") {
-        // 🔹 delete private chat (existing behavior)
+        // Delete the entire private chat conversation
         await api_helper(
           "/api/chats/private",
           "DELETE",
           { userId: recipient?.id || 0 },
-          token
+          token,
         );
       } else if (type === "group") {
-        // 🔹 clear group chat messages
+        // Clear all messages from the group chat history
         await api_helper(
           `/api/chats/group/fetch/${chatId}`,
           "DELETE",
           null,
-          token
+          token,
         );
       }
 
@@ -505,15 +561,16 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
     }
   };
 
-  // --- FETCH MEMBERS FUNCTION ---
+  /**
+   * Fetches and displays the list of members for a group chat.
+   */
   const handleFetchMembers = async () => {
     // Toggle off if already showing
     if (showMembers) {
       setShowMembers(false);
       return;
     }
-
-    // Set loading state (This caused your error before because the state wasn't defined)
+    // Set loading state
     setIsLoadingMembers(true);
 
     try {
@@ -525,12 +582,11 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (response.ok) {
         const data = await response.json();
-        // Expecting data format: ["Name1", "Name2", "Name3"]
         setMembersList(data);
         setShowMembers(true);
       } else {
@@ -543,6 +599,7 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
     }
   };
 
+  // Determine the chat title based on whether it's a group or private chat
   const chatTitle = type === "group" ? name : recipient.username;
 
   return (
@@ -581,7 +638,14 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
                   Members
                 </button>
               ) : (
-                "Online"
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isRecipientOnline ? "bg-green-500" : "bg-gray-400"
+                    }`}
+                  ></span>
+                  <span>{isRecipientOnline ? "Online" : "Offline"}</span>
+                </div>
               )}
             </span>
           </div>
@@ -627,7 +691,6 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
                       className="text-sm text-[#6F4E37] flex items-center gap-2 p-1 hover:bg-[#F9F7F5] rounded"
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-[#D7C0AE]"></span>
-                      {/* Direct string rendering for ["Lakshya", "Maverick"...] */}
                       {member}
                     </li>
                   ))
@@ -640,9 +703,8 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
             )}
           </div>
         )}
-        {/* --------------------- */}
 
-        {/* Only show delete for private for now */}
+        {/* Delete button for both private and group chats */}
         {(type === "private" || type === "group") && (
           <button
             onClick={handleDeleteChat}
@@ -686,14 +748,13 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
                     : "bg-white text-[#4A3B32] rounded-2xl rounded-tl-none border border-[#EBE5DE]/50"
                 }`}
               >
-                {/* SENDER NAME (Only inside bubble for received group messages) */}
+                {/* Display sender's name for messages in a group chat that are not from the current user */}
                 {!isMe && type === "group" && (
                   <p className="text-[12px] font-bold text-orange-700 mb-0.5 leading-tight">
                     {msg.sender_name}
                   </p>
                 )}
 
-                {/* MESSAGE TEXT */}
                 <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
                   {msg.text}
                 </p>
@@ -732,11 +793,19 @@ const ChatView = ({ currentUser, activeChat, onBack }) => {
   );
 };
 
+/**
+ * --- ROOT APP COMPONENT ---
+ * This is the main component that orchestrates the entire application.
+ * It handles user authentication state and renders the appropriate view:
+ * - AuthView: If the user is not logged in.
+ * - UserListView: If the user is logged in but hasn't selected a chat.
+ * - ChatView: If the user has an active chat selected.
+ */
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeChat, setActiveChat] = useState(null);
   const [loading, setLoading] = useState(true);
-
+  const [onlineUsers, setOnlineUsers] = useState({});
   useEffect(() => {
     const init = async () => {
       const token = localStorage.getItem("chat_token");
@@ -753,12 +822,48 @@ export default function App() {
     init();
   }, []);
 
+  // Effect to manage online status via sockets
+  useEffect(() => {
+    if (user) {
+      // Notify the server that this user is now online.
+      socket.emit("add-user", user.id);
+
+      // Server should emit this with an array of online user IDs upon connection
+      socket.on("online-users", (onlineUserIds) => {
+        const onlineStatus = {};
+        onlineUserIds.forEach((id) => {
+          onlineStatus[id] = true;
+        });
+        setOnlineUsers(onlineStatus);
+      });
+
+      // When a new user connects
+      socket.on("user-connected", (userId) => {
+        setOnlineUsers((prev) => ({ ...prev, [userId]: true }));
+      });
+
+      // When a user disconnects
+      socket.on("user-disconnected", (userId) => {
+        setOnlineUsers((prev) => ({ ...prev, [userId]: false }));
+      });
+    }
+
+    return () => {
+      socket.off("online-users");
+      socket.off("user-connected");
+      socket.off("user-disconnected");
+    };
+  }, [user]);
+
+  // Display a loading spinner during the initial authentication check
   if (loading)
     return (
       <div className="h-screen flex items-center justify-center bg-[#FDFBF7]">
         <div className="w-12 h-12 border-4 border-[#EBE5DE] border-t-[#6F4E37] rounded-full animate-spin"></div>
       </div>
     );
+
+  // Conditional rendering based on authentication and chat state
   if (!user) return <AuthView onLoginSuccess={setUser} />;
   if (activeChat)
     return (
@@ -766,16 +871,17 @@ export default function App() {
         currentUser={user}
         activeChat={activeChat}
         onBack={() => setActiveChat(null)}
+        isRecipientOnline={!!onlineUsers[activeChat.recipient?.id]}
       />
     );
   return (
     <UserListView
       currentUser={user}
       onChatSelect={setActiveChat}
+      onlineUsers={onlineUsers}
       onLogout={() => {
         localStorage.removeItem("chat_token");
         setUser(null);
-        window.location.reload();
       }}
     />
   );
